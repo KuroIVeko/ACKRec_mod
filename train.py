@@ -14,7 +14,7 @@ tf.set_random_seed(seed)
 learning_rate = 0.01
 decay_rate = 0.9
 global_steps = 10000
-decay_steps = 100
+decay_steps = 1000
 
 
 # Settings
