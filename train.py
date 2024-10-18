@@ -11,9 +11,9 @@ np.random.seed(seed)
 tf.set_random_seed(seed)
 
 # Set
-learning_rate = 0.001
-decay_rate = 1
-global_steps = 1000
+learning_rate = 0.01
+decay_rate = 0.9
+global_steps = 10000
 decay_steps = 100
 
 
