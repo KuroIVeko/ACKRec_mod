@@ -1,5 +1,6 @@
 from inits import *
-import tensorflow as tf
+import tensorflow.compat.v1 as tf # type: ignore
+tf.disable_v2_behavior()#兼容1.x版本
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -206,8 +207,8 @@ class SimpleAttLayer():
         with tf.variable_scope('v_'+self.tag):
             # Applying fully connected layer with non-linear activation to each of the B*T timestamps;
             #  the shape of `v` is (B,T,D)*(D,A)=(B,T,A), where A=attention_size
-            w_omega = tf.get_variable(initializer=tf.random_normal([hidden_size, self.attention_size],
-                                                                   stddev=0.1), name='w_omega')
+            w_omega = tf.get_variable(initializer=tf.random_normal([64, self.attention_size],
+                                                                   stddev=0.1), name='w_omega')#不知道为什么找不到hidden_size，只好写死为64
             self.vars['w_omega'] = w_omega
             b_omega = tf.get_variable(initializer=tf.random_normal([self.attention_size], stddev=0.1), name='b_omega')
             self.vars['b_omega'] = b_omega

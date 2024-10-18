@@ -1,5 +1,6 @@
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf # type: ignore
+tf.disable_v2_behavior()#兼容1.x版本
 
 def glorot(shape, name=None):
     """Glorot & Bengio (AISTATS 2010) init."""

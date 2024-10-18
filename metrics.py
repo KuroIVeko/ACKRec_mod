@@ -1,4 +1,5 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf # type: ignore
+tf.disable_v2_behavior()#兼容1.x版本
 
 def loss(rating,rate):
     err = tf.square(tf.subtract(rating,rate))
