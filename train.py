@@ -1,5 +1,6 @@
 from utils import *
-import tensorflow as tf
+import tensorflow.compat.v1 as tf # type: ignore
+tf.disable_v2_behavior()#兼容1.x版本
 from models import *
 import time
 import numpy as np
