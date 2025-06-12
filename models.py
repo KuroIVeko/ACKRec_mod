@@ -90,8 +90,8 @@ class GCN(Model):
 
     def _build(self):
 
-        self.layers.append(GraphConvolution(input_dim=self.input_dim,
-                                            output_dim=FLAGS.hidden1,
+        self.layers.append(GraphAttentionLayer(input_dim=self.input_dim,
+                                            output_dim=self.output_dim,
                                             length=self.length,
                                             placeholders=self.placeholders,
                                             tag=self.tag,
@@ -102,26 +102,36 @@ class GCN(Model):
                                             name='first'+self.tag,
                                             featureless=False))
 
-        self.layers.append(GraphConvolution(input_dim=FLAGS.hidden1,
-                                            output_dim=FLAGS.hidden2,
-                                            length=self.length,
-                                            placeholders=self.placeholders,
-                                            tag=self.tag,
-                                            act=tf.nn.relu,
-                                            dropout=True,
-                                            logging=self.logging))
+        # self.layers.append(GraphConvolution(input_dim=FLAGS.hidden1,
+        #                                     output_dim=FLAGS.hidden2,
+        #                                     length=self.length,
+        #                                     placeholders=self.placeholders,
+        #                                     tag=self.tag,
+        #                                     act=tf.nn.relu,
+        #                                     dropout=True,
+        #                                     logging=self.logging,
+        #                                     name='attention'+self.tag))
+        
+        # self.layers.append(GraphConvolution(input_dim=FLAGS.hidden2,
+        #                                     output_dim=self.output_dim,
+        #                                     length=self.length,
+        #                                     placeholders=self.placeholders,
+        #                                     tag=self.tag,
+        #                                     act=tf.nn.relu,
+        #                                     dropout=True,
+        #                                     logging=self.logging,
+        #                                     name='attention'+self.tag))
 
-        self.layers.append(GraphConvolution(input_dim=FLAGS.hidden2,
-                                            output_dim=self.output_dim,
-                                            length=self.length,
-                                            placeholders=self.placeholders,
-                                            tag=self.tag,
-                                            act=tf.nn.relu,
-                                            dropout=True,
-                                            logging=self.logging))
-        self.layers.append(SimpleAttLayer(attention_size=32,
-                                          tag=self.tag,
-                                          time_major=False))
+        # self.layers.append(GraphAttentionLayer(input_dim=FLAGS.hidden1,
+        #                                     output_dim=self.output_dim,
+        #                                     length=self.length,
+        #                                     placeholders=self.placeholders,
+        #                                     tag=self.tag,
+        #                                     act=tf.nn.relu,
+        #                                     dropout=True,
+        #                                     logging=self.logging,
+        #                                     name='attention'+self.tag))
+        
 
 class AGCNrec():
     def __init__(self,placeholders,input_dim_user,input_dim_item, user_dim, item_dim, learning_rate):

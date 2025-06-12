@@ -102,46 +102,38 @@ class GraphConvolution(Layer):
         self.bias = bias
         self.tag = tag
         self.length = length
-
-        # helper variable for sparse dropout
-        # self.num_features_nonzero = placeholders['num_features_nonzero']
+        # FIX: Store output_dim to explicitly set shape later
+        self.output_dim = output_dim
 
         with tf.variable_scope(self.name+ '_' + self.tag + '_vars'):
             for i in range(len(self.support)):
                 self.vars['weights_' + str(i)] = glorot([input_dim, output_dim],
                                                         name='weights_' + str(i))
-                # self.vars['bias_'+str(i)] = zeros([output_dim,], name='bias_' + str(i))
                 self.vars['bias_' + str(i)] = tf.zeros(shape=(self.length, 1), name='bias_' + str(i))
 
         if self.logging:
             self._log_vars()
 
     def _call(self, inputs):
+        x = inputs
+        
         supports = list()
         for i in range(len(self.support)):
-            if self.name == 'first'+self.tag: #这里注释了
-                x = inputs
-            else:
-                x = inputs[i]
-            # x = inputs #做成concat需要修改三个地方，修改这里的输入，add输出，移除attention
+            x_dropped = tf.nn.dropout(x, 1-self.dropout)
 
-        # dropout
-            x = tf.nn.dropout(x, 1-self.dropout)
-
-        # convolve
-        #     support = tf.matmul(self.support[i], x)
             if not self.featureless:
-                pre_sup = dot(x, self.vars['weights_' + str(i)])
+                pre_sup = dot(x_dropped, self.vars['weights_' + str(i)])
             else:
                 pre_sup = self.vars['weights_' + str(i)]
             support = dot(self.support[i], pre_sup)
-            # self.test.append(self.vars['bias_' + str(i)])
             support = support + self.vars['bias_' + str(i)]
-            supports.append(self.act(support))
-        # output = tf.add_n(supports) #这里解除注释了
-        output = supports #这里注释了
-        # bias
-        # return output
+            supports.append(support)
+
+        output = tf.add_n(supports)
+        
+        # FIX: Explicitly set the shape of the output tensor to fix inference issue.
+        output.set_shape([self.length, self.output_dim])
+
         return self.act(output)
 
 class RatLayer():
@@ -184,6 +176,78 @@ class RateLayer():
         rate_matrix2 = rate_matrix1+u_matrix+i_matrix
         return rate_matrix2
 
+class GraphAttentionLayer(Layer):
+    """图注意力层"""
+    def __init__(self, input_dim, output_dim, length, placeholders, tag, dropout=0.,
+                 sparse_inputs=False, act=tf.nn.relu, bias=False,
+                 featureless=False, **kwargs):
+        super(GraphAttentionLayer, self).__init__(**kwargs)
+
+        if dropout:
+            self.dropout = placeholders['dropout']
+        else:
+            self.dropout = 0.
+
+        self.act = act
+        self.support = placeholders['support_'+tag]
+        self.sparse_inputs = sparse_inputs
+        self.featureless = featureless
+        self.bias = bias
+        self.tag = tag
+        self.length = length
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
+        with tf.variable_scope(self.name + '_' + self.tag + '_vars'):
+            # 注意力权重矩阵
+            self.vars['attention_weights'] = glorot([input_dim, output_dim],
+                                                  name='attention_weights')
+            # 注意力向量
+            self.vars['attention_vector'] = glorot([2 * output_dim, 1],
+                                                 name='attention_vector')
+            if bias:
+                self.vars['bias'] = zeros([output_dim], name='bias')
+
+        if self.logging:
+            self._log_vars()
+
+    def _call(self, inputs):
+        x = inputs
+        x = tf.nn.dropout(x, 1-self.dropout)
+
+        transformed_features = dot(x, self.vars['attention_weights'])
+        
+        attention_scores = []
+        for i in range(len(self.support)):
+            neighbor_features = dot(self.support[i], transformed_features)
+            attention_input = tf.concat([transformed_features, neighbor_features], axis=1)
+            attention_score = dot(attention_input, self.vars['attention_vector'])
+            attention_score = tf.nn.leaky_relu(attention_score)
+            attention_scores.append(attention_score)
+
+        attention_scores = tf.concat(attention_scores, axis=1)
+
+        attention_weights = tf.nn.softmax(attention_scores, axis=1)
+
+        outputs = []
+        for i in range(len(self.support)):
+            output = dot(self.support[i], transformed_features)
+            current_attention = attention_weights[:, i]
+            attention_weight = tf.expand_dims(current_attention, axis=1)
+            output = output * attention_weight
+            outputs.append(output)
+
+        output = tf.add_n(outputs)
+        
+        # FIX: Explicitly set the shape of the output tensor to fix inference issue.
+        output.set_shape([self.length, self.output_dim])
+        
+        if self.bias:
+            output += self.vars['bias']
+            
+        return self.act(output)
+
+
 class SimpleAttLayer():
     def __init__(self, attention_size, tag, time_major=False):
         self.attention_size = attention_size
@@ -193,22 +257,16 @@ class SimpleAttLayer():
 
     def __call__(self, inputs):
         if isinstance(inputs, tuple):
-            # In case of Bi-RNN, concatenate the forward and the backward RNN outputs.
             inputs = tf.concat(inputs, 2)
 
         if self.time_major:
-            # (T,B,D) => (B,T,D)
             inputs = tf.transpose(inputs, [1, 0, 2])
 
-        hidden_size = inputs.shape[2].value  # D value - hidden size of the RNN layer
-
-        # Trainable parameters
+        hidden_size = inputs.shape[2].value
 
         with tf.variable_scope('v_'+self.tag):
-            # Applying fully connected layer with non-linear activation to each of the B*T timestamps;
-            #  the shape of `v` is (B,T,D)*(D,A)=(B,T,A), where A=attention_size
             w_omega = tf.get_variable(initializer=tf.random_normal([64, self.attention_size],
-                                                                   stddev=0.1), name='w_omega')#不知道为什么找不到hidden_size，只好写死为64
+                                                                   stddev=0.1), name='w_omega')
             self.vars['w_omega'] = w_omega
             b_omega = tf.get_variable(initializer=tf.random_normal([self.attention_size], stddev=0.1), name='b_omega')
             self.vars['b_omega'] = b_omega
@@ -216,12 +274,9 @@ class SimpleAttLayer():
             self.vars['u_omega'] = u_omega
             v = tf.tanh(tf.tensordot(inputs, w_omega, axes=1) + b_omega)
 
-        # For each of the timestamps its vector of size A from `v` is reduced with `u` vector
-        vu = tf.tensordot(v, u_omega, axes=1, name='vu')  # (B,T) shape
-        alphas = tf.nn.softmax(vu, name='alphas')         # (B,T) shape
+        vu = tf.tensordot(v, u_omega, axes=1, name='vu')
+        alphas = tf.nn.softmax(vu, name='alphas')
         self.alphas = vu
-
-        # Output of (Bi-)RNN is reduced with attention vector; the result has (B,D) shape
 
         output = tf.reduce_sum(inputs*tf.expand_dims(alphas, -1), 0)
 
