@@ -177,7 +177,7 @@ class RateLayer():
         return rate_matrix2
 
 class GraphAttentionLayer(Layer):
-    """图注意力层"""
+    """图注意力层，支持在每种元路径模式内部进行GAT操作"""
     def __init__(self, input_dim, output_dim, length, placeholders, tag, dropout=0.,
                  sparse_inputs=False, act=tf.nn.relu, bias=False,
                  featureless=False, **kwargs):
@@ -199,12 +199,14 @@ class GraphAttentionLayer(Layer):
         self.output_dim = output_dim
 
         with tf.variable_scope(self.name + '_' + self.tag + '_vars'):
-            # 注意力权重矩阵
-            self.vars['attention_weights'] = glorot([input_dim, output_dim],
-                                                  name='attention_weights')
-            # 注意力向量
-            self.vars['attention_vector'] = glorot([2 * output_dim, 1],
-                                                 name='attention_vector')
+            # 为每种元路径模式创建独立的注意力权重
+            self.vars['attention_weights'] = {}
+            self.vars['attention_vector'] = {}
+            for i in range(len(self.support)):
+                self.vars['attention_weights'][i] = glorot([input_dim, output_dim],
+                                                      name=f'attention_weights_{i}')
+                self.vars['attention_vector'][i] = glorot([2 * output_dim, 1],
+                                                     name=f'attention_vector_{i}')
             if bias:
                 self.vars['bias'] = zeros([output_dim], name='bias')
 
@@ -215,38 +217,35 @@ class GraphAttentionLayer(Layer):
         x = inputs
         x = tf.nn.dropout(x, 1-self.dropout)
 
-        transformed_features = dot(x, self.vars['attention_weights'])
-        
-        attention_scores = []
+        # 为每种元路径模式计算独立的注意力
+        path_outputs = []
         for i in range(len(self.support)):
+            # 使用当前元路径模式的注意力权重
+            transformed_features = dot(x, self.vars['attention_weights'][i])
+            
+            # 计算当前元路径模式下的注意力分数
             neighbor_features = dot(self.support[i], transformed_features)
             attention_input = tf.concat([transformed_features, neighbor_features], axis=1)
-            attention_score = dot(attention_input, self.vars['attention_vector'])
+            attention_score = dot(attention_input, self.vars['attention_vector'][i])
             attention_score = tf.nn.leaky_relu(attention_score)
-            attention_scores.append(attention_score)
-
-        attention_scores = tf.concat(attention_scores, axis=1)
-
-        attention_weights = tf.nn.softmax(attention_scores, axis=1)
-
-        outputs = []
-        for i in range(len(self.support)):
+            
+            # 应用注意力权重
+            attention_weights = tf.nn.softmax(attention_score, axis=1)
             output = dot(self.support[i], transformed_features)
-            current_attention = attention_weights[:, i]
-            attention_weight = tf.expand_dims(current_attention, axis=1)
-            output = output * attention_weight
-            outputs.append(output)
+            output = output * attention_weights
+            
+            path_outputs.append(output)
 
-        output = tf.add_n(outputs)
+        # 合并所有元路径模式的输出
+        output = tf.add_n(path_outputs)
         
-        # FIX: Explicitly set the shape of the output tensor to fix inference issue.
+        # 设置输出形状
         output.set_shape([self.length, self.output_dim])
         
         if self.bias:
             output += self.vars['bias']
             
         return self.act(output)
-
 
 class SimpleAttLayer():
     def __init__(self, attention_size, tag, time_major=False):

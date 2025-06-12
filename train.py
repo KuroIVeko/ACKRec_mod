@@ -13,18 +13,18 @@ tf.set_random_seed(seed)
 # Set
 learning_rate = 0.01
 decay_rate = 0.9
-global_steps = 10000
+global_steps = 20000
 decay_steps = 1000
 
 
 # Settings
 flags = tf.app.flags
 FLAGS = flags.FLAGS
-flags.DEFINE_integer('hidden1', 128, 'Number of units in hidden layer 1.')
+flags.DEFINE_integer('hidden1', 256, 'Number of units in hidden layer 1.')
 flags.DEFINE_integer('hidden2', 128, 'Number of units in hidden layer 2.')
 flags.DEFINE_float('dropout', 0.2, 'Dropout rate (1 - keep probability).')
 flags.DEFINE_float('weight_decay', 5e-4, 'Weight for L2 loss on embedding matrix.')
-flags.DEFINE_integer('output_dim', 64, 'Output_dim of user final embedding.')
+flags.DEFINE_integer('output_dim', 128, 'Output_dim of user final embedding.')
 flags.DEFINE_integer('latent_dim', 30,'Latent_dim of user&item.')
 
 

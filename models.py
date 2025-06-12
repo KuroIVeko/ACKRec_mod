@@ -86,7 +86,13 @@ class GCN(Model):
         # Weight decay loss
         for i in range(len(self.layers)):
             for var in self.layers[i].vars.values():
-                self.loss += FLAGS.weight_decay * tf.nn.l2_loss(var)
+                if isinstance(var, dict):
+                    # 如果是字典类型，遍历字典中的所有变量
+                    for v in var.values():
+                        self.loss += FLAGS.weight_decay * tf.nn.l2_loss(v)
+                else:
+                    # 如果不是字典类型，直接计算L2损失
+                    self.loss += FLAGS.weight_decay * tf.nn.l2_loss(var)
 
     def _build(self):
 
